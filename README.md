@@ -71,6 +71,28 @@ docker compose up -d
 
 Creá DB/usuario equivalente a `DATABASE_URL` del `.env.example`.
 
+Ejemplo para Postgres local si querés usar exactamente el `.env.example`:
+
+```bash
+psql -h 127.0.0.1 -U postgres -d postgres
+```
+
+Luego, dentro de `psql`:
+
+```sql
+CREATE ROLE chirp WITH LOGIN PASSWORD 'chirp';
+CREATE DATABASE chirp OWNER chirp;
+\q
+```
+
+Verificación rápida:
+
+```bash
+psql "postgresql://chirp:chirp@127.0.0.1:5432/chirp?schema=public" -c "SELECT 1"
+```
+
+Si usás otro usuario / password / nombre de base, actualizá `DATABASE_URL` en `.env` para que coincida con tu instalación local.
+
 ### 4. Esquema Prisma
 
 ```bash
@@ -162,6 +184,21 @@ Para alinearte con la rúbrica: *scaffolding → modelo/DB → auth backend → 
 - Sin refresco en tiempo real del timeline (bonus no implementado).
 - Feed de perfil muestra tweets de ese usuario (no “con respuestas” estilo X).
 - E2E asume Postgres disponible; CI debe exportar `DATABASE_URL` o levantar servicio.
+
+## Qué se corrigió durante el setup
+
+- El API ahora carga el `.env` de la raíz del monorepo al arrancar, así que no dependés de hacer `export DATABASE_URL` en cada terminal.
+- Los scripts `npm run db:generate`, `db:push`, `db:seed` y `db:migrate` en `apps/api` leen `../../.env` con `dotenv`, para que Prisma use la misma configuración que el servidor.
+- El seed también carga el mismo `.env`, evitando errores por `DATABASE_URL` faltante.
+- Si aparece `P1010: User was denied access on the database`, el problema ya no es el loader de variables sino las credenciales reales de Postgres en `DATABASE_URL`.
+- El proyecto usa `127.0.0.1` en la documentación para mantener consistencia entre cookies, `WEB_ORIGIN` y la URL del frontend.
+
+## Troubleshooting rápido
+
+- `echo "$DATABASE_URL"` vacío: no necesariamente es un problema. Si existe `.env` en la raíz, el API y los scripts Prisma igual lo cargan.
+- `npm run db:push` o `npm run db:seed` falla con `P1010`: revisá usuario, password, DB y permisos del Postgres local.
+- `docker compose up -d` falla con socket / daemon: Docker es opcional; podés usar Postgres local.
+- Login o signup devuelve 500 por Prisma: confirmá primero que `npm run db:push` y `npm run db:seed` hayan corrido bien contra la misma `DATABASE_URL`.
 
 ## Estructura
 
