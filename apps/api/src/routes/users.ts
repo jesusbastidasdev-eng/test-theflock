@@ -68,21 +68,38 @@ export const userRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get("/users/search", async (req, reply) => {
-    const q = typeof (req.query as { q?: string }).q === "string" ? (req.query as { q: string }).q.trim() : "";
-    if (q.length < 1) {
-      return reply.send({ users: [] });
-    }
-    const users = await prisma.user.findMany({
-      where: {
-        OR: [
-          { username: { contains: q, mode: "insensitive" } },
-          { email: { contains: q, mode: "insensitive" } },
-        ],
-      },
-      take: 20,
-      orderBy: { username: "asc" },
+    const qRaw = typeof (req.query as { q?: string }).q === "string" ? (req.query as { q: string }).q.trim() : "";
+    const qp = req.query as { limit?: string; skip?: string };
+    const limitRaw = Number.parseInt(typeof qp.limit === "string" ? qp.limit : "", 10);
+    const skipRaw = Number.parseInt(typeof qp.skip === "string" ? qp.skip : "", 10);
+    const limit = Math.min(50, Math.max(1, Number.isFinite(limitRaw) ? limitRaw : 20));
+    const skip = Math.max(0, Number.isFinite(skipRaw) ? skipRaw : 0);
+
+    const where =
+      qRaw.length >= 1
+        ? {
+            OR: [
+              { username: { contains: qRaw, mode: "insensitive" } },
+              { email: { contains: qRaw, mode: "insensitive" } },
+            ],
+          }
+        : undefined;
+
+    const rows = await prisma.user.findMany({
+      where,
+      orderBy: [{ username: "asc" }, { id: "asc" }],
+      skip,
+      take: limit + 1,
     });
-    return reply.send({ users: users.map((u) => toUserPublic(u)) });
+
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
+    const nextSkip = hasMore ? skip + limit : null;
+
+    return reply.send({
+      users: page.map((u) => toUserPublic(u)),
+      nextSkip,
+    });
   });
 
   app.get<{ Params: { username: string } }>("/users/:username", async (req, reply) => {

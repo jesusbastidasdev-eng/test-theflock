@@ -40,20 +40,33 @@ describe("user routes", () => {
     vi.clearAllMocks();
   });
 
-  it("GET /api/users/search empty q", async () => {
+  it("GET /api/users/search without q lists users with pagination", async () => {
+    vi.mocked(prisma.user.findMany).mockResolvedValue([u("alice")]);
     const app = await buildTestApp();
-    const res = await app.inject({ method: "GET", url: "/api/users/search" });
+    const res = await app.inject({ method: "GET", url: "/api/users/search?limit=20&skip=0" });
     expect(res.statusCode).toBe(200);
-    expect((res.json() as { users: unknown[] }).users).toEqual([]);
+    const body = res.json() as { users: { username: string }[]; nextSkip: number | null };
+    expect(body.users[0].username).toBe("alice");
+    expect(body.nextSkip).toBeNull();
+    expect(prisma.user.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: undefined,
+        skip: 0,
+        take: 21,
+        orderBy: [{ username: "asc" }, { id: "asc" }],
+      })
+    );
     await app.close();
   });
 
   it("GET /api/users/search finds users", async () => {
     vi.mocked(prisma.user.findMany).mockResolvedValue([u("alice")]);
     const app = await buildTestApp();
-    const res = await app.inject({ method: "GET", url: "/api/users/search?q=al" });
+    const res = await app.inject({ method: "GET", url: "/api/users/search?q=al&limit=20&skip=0" });
     expect(res.statusCode).toBe(200);
-    expect((res.json() as { users: { username: string }[] }).users[0].username).toBe("alice");
+    const body = res.json() as { users: { username: string }[]; nextSkip: number | null };
+    expect(body.users[0].username).toBe("alice");
+    expect(body.nextSkip).toBeNull();
     await app.close();
   });
 
